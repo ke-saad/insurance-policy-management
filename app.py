@@ -79,13 +79,13 @@ class GetSQLPolicy(Resource):
         return {'SQL policies info list': ordered_policies_sql}
 
 
-@api.route('/get/secondary infos')
-class GetMongoDBPolicy(Resource):
-    def get(self):
-        policies_mongo = policy_info_collection.find()
-        ordered_policies_mongo = [policy_info_schema.dump(
-            policy) for policy in policies_mongo]
-        return {'MongoDB policies info list': ordered_policies_mongo}
+# @api.route('/get/secondary infos')
+# class GetMongoDBPolicy(Resource):
+#     def get(self):
+#         policies_mongo = policy_info_collection.find()
+#         ordered_policies_mongo = [policy_info_schema.dump(
+#             policy) for policy in policies_mongo]
+#         return {'MongoDB policies info list': ordered_policies_mongo}
 
 
 @api.route('/get/exhaustive list')
@@ -392,10 +392,13 @@ class DeletePolicy(Resource):
 
             return {'message': 'Policy deleted successfully'}
 
+
+
+
 @api.route('/upload')
 class FileUpload(Resource):
     @api.expect(file_upload_model, validate=True)
-    def post(self):
+    def post(self):  # Rename method to 'post_file'
         try:
             # Check if the file is uploaded in the request
             if 'file' not in request.files:
@@ -418,6 +421,7 @@ class FileUpload(Resource):
 
         except Exception as e:
             return {'error': str(e)}, 500
+
 
 
 if __name__ == "__main__":
