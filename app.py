@@ -1,4 +1,5 @@
-
+import io
+import base64
 from flask import Flask, request, jsonify, render_template
 from flask_sqlalchemy import SQLAlchemy
 from flask_marshmallow import Marshmallow
@@ -20,7 +21,7 @@ policy_info_collection = mongo.db.policies_infos
 
 # Define the model for the file upload
 file_upload_model = api.model('FileUpload', {
-    'file': fields.String(description='CSV or XLSX file to upload')
+    'file': fields.Raw(description='CSV or XLSX file to upload')
 })
 
 # Table
@@ -200,14 +201,15 @@ class DeletePolicy(Resource):
 
             return {'message': 'Policy deleted successfully'}
 
-@app.route('/upload-page')
-def upload_page():
-    return render_template('upload.html')
+# @app.route('/upload-page')
+# def upload_page():
+#     return render_template('upload.html')
+
 
 @api.route('/upload')
 class FileUpload(Resource):
     @api.expect(file_upload_model, validate=True)
-    def post(self):  
+    def post(self):
         try:
             # Check if the file is uploaded in the request
             if 'file' not in request.files:
@@ -215,18 +217,24 @@ class FileUpload(Resource):
 
             file = request.files['file']
 
-            # Read the file into a pandas DataFrame based on file type
+            # Read the content of the file
+            file_content = file.read()
+
+            # Encode the content in base64
+            encoded_content = base64.b64encode(file_content).decode('utf-8')
+
+           # Read the encoded content into a pandas DataFrame based on file type
             if file.filename.endswith('.csv'):
-                df = pd.read_csv(file)
+                df = pd.read_csv(io.BytesIO(file_content))
             elif file.filename.endswith('.xlsx'):
-                df = pd.read_excel(file, engine='openpyxl')
+                df = pd.read_excel(io.BytesIO(file_content), engine='openpyxl')
             else:
                 return {'error': 'Invalid file format. Only CSV or XLSX files are supported'}, 400
 
             # Convert DataFrame to dictionary
             data_dict = df.to_dict(orient='records')
 
-            return {'data': data_dict}, 200
+            return {'data': data_dict, 'encoded_file_content': encoded_content}, 200
 
         except Exception as e:
             return {'error': str(e)}, 500
