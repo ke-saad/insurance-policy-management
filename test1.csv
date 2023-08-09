@@ -1,0 +1,5 @@
+id,perc_premium_paid_by_cash_credit,age_in_days,Income,Count_3-6_months_late,Count_6-12_months_late,Count_more_than_12_months_late,application_underwriting_score,no_of_premiums_paid,sourcing_channel
+649,0.001,27384,51150,0,0,0,99.89,7,A
+81136,0.124,23735,285140,0,0,0,98.93,19,A
+70762,1,17170,186030,0,0,0,,2,B
+53935,0.198,16068,123540,0,0,0,99,11,B

@@ -1,3 +1,4 @@
+import os
 import io
 import base64
 from flask import Flask, request, jsonify, render_template
@@ -6,11 +7,15 @@ from flask_marshmallow import Marshmallow
 from flask_restx import Api, Resource, fields
 from flask_pymongo import PyMongo
 import pandas as pd
+from flask_wtf import FlaskForm
+from wtforms import FileField, SubmitField
+from werkzeug.utils import secure_filename 
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'mssql+pyodbc://SAAD\\SQLEXPRESS/policies_db?driver=ODBC+Driver+17+for+SQL+Server'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SECRET_KEY'] = '1234'
+app.config['UPLOAD_FOLDER']='static/files'
 
 db = SQLAlchemy(app)
 ma = Marshmallow(app)
@@ -20,13 +25,11 @@ policy_info_collection = mongo.db.policies_infos
 
 
 # Define the model for the file upload
-file_upload_model = api.model('FileUpload', {
-    'file': fields.Raw(description='CSV or XLSX file to upload')
+file_upload_model = api.model('UploadFileForm', {
+    'file': fields.String(description='CSV or XLSX file to upload')
 })
 
 # Table
-
-
 class Policy(db.Model):
     __tablename__ = 'Policy'
     policy_id = db.Column(db.Integer, primary_key=True,
@@ -201,44 +204,42 @@ class DeletePolicy(Resource):
 
             return {'message': 'Policy deleted successfully'}
 
-# @app.route('/upload-page')
-# def upload_page():
-#     return render_template('upload.html')
 
-
-@api.route('/upload')
-class FileUpload(Resource):
+@api.route('/upload-and-read', methods=['POST'])
+class UploadAndRead(Resource):
     @api.expect(file_upload_model, validate=True)
     def post(self):
         try:
             # Check if the file is uploaded in the request
-            if 'file' not in request.files:
-                return {'error': 'No file uploaded'}, 400
+            #if 'file' not in request.files:
+            cwd = os.getcwd()
+            file_path = request.json['file']
+            print('file 1 ___________',file_path)
+            df = pd.read_csv(file_path)
+            a=5
+            
 
-            file = request.files['file']
+            
 
             # Read the content of the file
-            file_content = file.read()
+            '''file_content = file.read()
 
-            # Encode the content in base64
-            encoded_content = base64.b64encode(file_content).decode('utf-8')
-
-           # Read the encoded content into a pandas DataFrame based on file type
+            # Read the content into a pandas DataFrame based on file type
             if file.filename.endswith('.csv'):
                 df = pd.read_csv(io.BytesIO(file_content))
             elif file.filename.endswith('.xlsx'):
                 df = pd.read_excel(io.BytesIO(file_content), engine='openpyxl')
             else:
-                return {'error': 'Invalid file format. Only CSV or XLSX files are supported'}, 400
+                return {'error': 'Invalid file format. Only CSV or XLSX files are supported'}, 400'''
 
             # Convert DataFrame to dictionary
             data_dict = df.to_dict(orient='records')
 
-            return {'data': data_dict, 'encoded_file_content': encoded_content}, 200
+            return {'data': data_dict}, 200
 
         except Exception as e:
             return {'error': str(e)}, 500
 
 
 if __name__ == "__main__":
-    app.run()
+    app.run(debug=True)
