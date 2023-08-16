@@ -1,21 +1,20 @@
 import os
-import io
-import base64
 from flask import Flask, request, jsonify, render_template
 from flask_sqlalchemy import SQLAlchemy
 from flask_marshmallow import Marshmallow
 from flask_restx import Api, Resource, fields
 from flask_pymongo import PyMongo
 import pandas as pd
-from flask_wtf import FlaskForm
-from wtforms import FileField, SubmitField
-from werkzeug.utils import secure_filename 
+from pandas import DataFrame as df
+# from flask_wtf import FlaskForm
+# from wtforms import FileField, SubmitField
+from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'mssql+pyodbc://SAAD\\SQLEXPRESS/policies_db?driver=ODBC+Driver+17+for+SQL+Server'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SECRET_KEY'] = '1234'
-app.config['UPLOAD_FOLDER']='static/files'
+app.config['UPLOAD_FOLDER'] = 'static/files'
 
 db = SQLAlchemy(app)
 ma = Marshmallow(app)
@@ -30,6 +29,8 @@ file_upload_model = api.model('UploadFileForm', {
 })
 
 # Table
+
+
 class Policy(db.Model):
     __tablename__ = 'Policy'
     policy_id = db.Column(db.Integer, primary_key=True,
@@ -211,15 +212,11 @@ class UploadAndRead(Resource):
     def post(self):
         try:
             # Check if the file is uploaded in the request
-            #if 'file' not in request.files:
+            # if 'file' not in request.files:
             cwd = os.getcwd()
             file_path = request.json['file']
-            print('file 1 ___________',file_path)
+            print('file 1 ___________', file_path)
             df = pd.read_csv(file_path)
-            a=5
-            
-
-            
 
             # Read the content of the file
             '''file_content = file.read()
@@ -236,6 +233,66 @@ class UploadAndRead(Resource):
             data_dict = df.to_dict(orient='records')
 
             return {'data': data_dict}, 200
+
+        except Exception as e:
+            return {'error': str(e)}, 500
+
+
+@api.route('/get/id-by-income')
+class GetIdByIncome(Resource):
+    @api.expect(api.model('IncomeRequest', {
+        'income_type': fields.String(description='Type of income (max or min)'),
+        'file_path': fields.String(description='Path to the CSV or XLSX file')
+    }))
+    def post(self):
+        try:
+            income_type = request.json.get('income_type')
+            # Get the file path from the request
+            file_path = request.json.get('file_path')
+
+            # Read the data from the specified file into a DataFrame instance
+            # Use read_excel for XLSX files
+            df_instance = pd.read_csv(file_path)
+
+            if income_type == 'max':
+                max_income_record = df_instance[df_instance['Income']
+                                                == df_instance['Income'].max()]
+                result = max_income_record['id'].values[0]
+            elif income_type == 'min':
+                min_income_record = df_instance[df_instance['Income']
+                                                == df_instance['Income'].min()]
+                result = min_income_record['id'].values[0]
+            else:
+                return {'error': 'Invalid income_type. Use max or min'}, 400
+
+            # Convert result to a JSON serializable data type (e.g., int)
+            result = int(result)
+
+            return {'id': result}, 200
+
+        except Exception as e:
+            return {'error': str(e)}, 500
+
+
+# Create a new resource for calculating average income
+
+
+@api.route('/calculate/average-income')
+class CalculateAverageIncome(Resource):
+    @api.expect(api.model('AverageIncomeRequest', {
+        'file_path': fields.String(description='Path to the CSV or XLSX file')
+    }))
+    def post(self):
+        try:
+            # Get the file path from the request
+            file_path = request.json.get('file_path')
+
+            # Read the data from the specified file into a DataFrame instance
+            # Use read_excel for XLSX files
+            df_instance = pd.read_csv(file_path)
+
+            average_income = df_instance['Income'].mean()
+            return {'average_income': average_income}, 200
 
         except Exception as e:
             return {'error': str(e)}, 500
