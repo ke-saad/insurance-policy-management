@@ -1,21 +1,20 @@
 import os
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request
 from flask_sqlalchemy import SQLAlchemy
 from flask_marshmallow import Marshmallow
 from flask_restx import Api, Resource, fields
 from flask_pymongo import PyMongo
 import pandas as pd
 from pandas import DataFrame as df
-# from flask_wtf import FlaskForm
-# from wtforms import FileField, SubmitField
-from werkzeug.utils import secure_filename
 
+# Configuration de l'application Flask :
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'mssql+pyodbc://SAAD\\SQLEXPRESS/policies_db?driver=ODBC+Driver+17+for+SQL+Server'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SECRET_KEY'] = '1234'
 app.config['UPLOAD_FOLDER'] = 'static/files'
 
+# Configuration des bases de données et des bibliothèques associées :
 db = SQLAlchemy(app)
 ma = Marshmallow(app)
 api = Api(app)
@@ -23,18 +22,16 @@ mongo = PyMongo(app, uri='mongodb://localhost:27017/mydatabase')
 policy_info_collection = mongo.db.policies_infos
 
 
-# Define the model for the file upload
+# Définition du modèle pour le téléchargement des fichiers csv et xlsx:
 file_upload_model = api.model('UploadFileForm', {
     'file': fields.String(description='CSV or XLSX file to upload')
 })
 
-# Table
 
-
+# Définiton du tableau Policy dans la bases de données sur SQL Server en tant que classe :
 class Policy(db.Model):
     __tablename__ = 'Policy'
-    policy_id = db.Column(db.Integer, primary_key=True,
-                          nullable=False, autoincrement=True)
+    policy_id = db.Column(db.Integer, primary_key=True, nullable=False, autoincrement=True)
     policy_number = db.Column(db.String(50), nullable=False)
     policy_holder_name = db.Column(db.String(100), nullable=False)
     coverage_amount = db.Column(db.Float, nullable=False)
@@ -47,6 +44,7 @@ class Policy(db.Model):
         self.premium_amount = premium_amount
 
 
+# Définition du schéma de sérialisation de ses attributs:
 class PolicySchema(ma.Schema):
     class Meta:
         fields = ('policy_id', 'policy_number', 'policy_holder_name',
@@ -57,7 +55,7 @@ policy_schema = PolicySchema()
 policies_schema = PolicySchema(many=True)
 
 
-# MongoDB data
+# Définition d'une classe indiquant la structure des enregistrements sur mongoDB :
 class PolicyInfo:
     def __init__(self, policy_id, claims_info, policy_documents):
         self.policy_id = policy_id
@@ -65,6 +63,7 @@ class PolicyInfo:
         self.policy_documents = policy_documents
 
 
+# Définition du schéma de sérialisation de ses attributs:
 class PolicyInfoSchema(ma.Schema):
     class Meta:
         fields = ('policy_id', 'claims_info', 'policy_documents')
@@ -74,8 +73,10 @@ policy_info_schema = PolicyInfoSchema()
 policy_infos_schema = PolicyInfoSchema(many=True)
 
 
-# Routes
-@api.route('/get/main infos')
+# Les routes fonctionnelles pour notre API :
+
+#Affichage des données principales stockées dans la base de données SQL Server:
+@api.route('/get/main-infos')
 class GetSQLPolicy(Resource):
     def get(self):
         policies_sql = Policy.query.all()
@@ -83,8 +84,8 @@ class GetSQLPolicy(Resource):
             policy) for policy in policies_sql]
         return {'SQL policies info list': ordered_policies_sql}
 
-
-@api.route('/get/secondary infos')
+#Affichage des données complémentaires stockées dans la base de données MongoDB:
+@api.route('/get/secondary-infos')
 class GetMongoDBPolicy(Resource):
     def get(self):
         policies_mongo = policy_info_collection.find()
@@ -93,7 +94,8 @@ class GetMongoDBPolicy(Resource):
         return {'MongoDB policies info list': ordered_policies_mongo}
 
 
-@api.route('/get/exhaustive list')
+#Affichage d'une combinaison des informations contenues dans les deux bases de données :
+@api.route('/get/exhaustive-list')
 class GetCombinedPolicy(Resource):
     def get(self):
         policies_sql = Policy.query.all()
@@ -113,6 +115,7 @@ class GetCombinedPolicy(Resource):
         return {'Combined policies info list': combined_policies}
 
 
+#Ajout d'une nouvelle police d'assurance, cet ajout concerne les deux bases de données :
 @api.route('/post')
 class PostPolicy(Resource):
     @api.expect(api.model('Policy', {
@@ -143,8 +146,8 @@ class PostPolicy(Resource):
         db.session.add(policy)
         db.session.commit()
 
-        if add_to_mongodb:
-            policy_id = policy.policy_id  # Get the auto-generated policy ID
+        if add_to_mongodb:  #Cette condition est indéfiniment vérifiée.
+            policy_id = policy.policy_id  
             policy_info = PolicyInfo(
                 policy_id=policy_id,
                 claims_info=claims_info,
@@ -156,6 +159,9 @@ class PostPolicy(Resource):
         return {'message': 'Policy added to database successfully'}
 
 
+# Mise à jour d'une police d'assurance, utilisant 
+# l'identifiant auto-généré sur la base de données SQL Server 
+# et non pas la valeur alphanumérique que nous saisissons :
 @api.route('/put/<int:policy_id>')
 class PutPolicy(Resource):
     @api.expect(api.model('Policy', {
@@ -190,6 +196,7 @@ class PutPolicy(Resource):
             return {'message': 'Policy updated successfully'}
 
 
+# Suppression d'une police d'assurance, toujours via l'identifiant mentionné avant :
 @api.route('/delete/<int:policy_id>')
 class DeletePolicy(Resource):
     def delete(self, policy_id):
@@ -206,30 +213,18 @@ class DeletePolicy(Resource):
             return {'message': 'Policy deleted successfully'}
 
 
+# Téléchargement d'un fichier CSV ou XLSX, qui sera lu 
+# dans un DataFrame et converti en dictionnaire:
 @api.route('/upload-and-read', methods=['POST'])
 class UploadAndRead(Resource):
     @api.expect(file_upload_model, validate=True)
     def post(self):
         try:
-            # Check if the file is uploaded in the request
-            # if 'file' not in request.files:
-            cwd = os.getcwd()
             file_path = request.json['file']
             print('file 1 ___________', file_path)
             df = pd.read_csv(file_path)
 
-            # Read the content of the file
-            '''file_content = file.read()
-
-            # Read the content into a pandas DataFrame based on file type
-            if file.filename.endswith('.csv'):
-                df = pd.read_csv(io.BytesIO(file_content))
-            elif file.filename.endswith('.xlsx'):
-                df = pd.read_excel(io.BytesIO(file_content), engine='openpyxl')
-            else:
-                return {'error': 'Invalid file format. Only CSV or XLSX files are supported'}, 400'''
-
-            # Convert DataFrame to dictionary
+            # Conversion du DataFrame en dictionnaire :
             data_dict = df.to_dict(orient='records')
 
             return {'data': data_dict}, 200
@@ -238,6 +233,7 @@ class UploadAndRead(Resource):
             return {'error': str(e)}, 500
 
 
+# Récupération de l'identifiant associé au revenu maximal ou minimal depuis un fichier:
 @api.route('/get/id-by-income')
 class GetIdByIncome(Resource):
     @api.expect(api.model('IncomeRequest', {
@@ -247,13 +243,8 @@ class GetIdByIncome(Resource):
     def post(self):
         try:
             income_type = request.json.get('income_type')
-            # Get the file path from the request
             file_path = request.json.get('file_path')
-
-            # Read the data from the specified file into a DataFrame instance
-            # Use read_excel for XLSX files
             df_instance = pd.read_csv(file_path)
-
             if income_type == 'max':
                 max_income_record = df_instance[df_instance['Income']
                                                 == df_instance['Income'].max()]
@@ -265,7 +256,7 @@ class GetIdByIncome(Resource):
             else:
                 return {'error': 'Invalid income_type. Use max or min'}, 400
 
-            # Convert result to a JSON serializable data type (e.g., int)
+            # Conversion du résultat en un type de données JSON-sérialisable (ex : int) :
             result = int(result)
 
             return {'id': result}, 200
@@ -274,9 +265,8 @@ class GetIdByIncome(Resource):
             return {'error': str(e)}, 500
 
 
-# Create a new resource for calculating average income
 
-
+# Calcul du revenu (income) moyen de l'ensemble des enregistrements dans un fichier CSV ou XLSX :
 @api.route('/calculate/average-income')
 class CalculateAverageIncome(Resource):
     @api.expect(api.model('AverageIncomeRequest', {
@@ -284,16 +274,10 @@ class CalculateAverageIncome(Resource):
     }))
     def post(self):
         try:
-            # Get the file path from the request
             file_path = request.json.get('file_path')
-
-            # Read the data from the specified file into a DataFrame instance
-            # Use read_excel for XLSX files
             df_instance = pd.read_csv(file_path)
-
             average_income = df_instance['Income'].mean()
             return {'average_income': average_income}, 200
-
         except Exception as e:
             return {'error': str(e)}, 500
 
